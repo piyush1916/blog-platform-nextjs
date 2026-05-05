@@ -1,0 +1,33 @@
+import { NextResponse } from "next/server";
+import { loginMockUser } from "../../../lib/mock-data";
+
+export async function POST(request) {
+  let body;
+
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json(
+      { message: "Invalid JSON body." },
+      { status: 400 },
+    );
+  }
+
+  const email = body?.email?.trim();
+  const password = body?.password;
+
+  if (!email || !password) {
+    return NextResponse.json(
+      { message: "Email and password are required." },
+      { status: 400 },
+    );
+  }
+
+  const result = loginMockUser({ email, password });
+
+  if (result.error) {
+    return NextResponse.json({ message: result.error }, { status: 401 });
+  }
+
+  return NextResponse.json({ token: result.token });
+}

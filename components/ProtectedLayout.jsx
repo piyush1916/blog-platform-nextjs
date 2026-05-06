@@ -75,7 +75,12 @@ export default function ProtectedLayout({
   }, [authQuery.error, queryClient, router]);
 
   async function handleLogout() {
-    await fetch("/api/logout", { method: "POST" });
+    try {
+      await fetch("/api/logout", { method: "POST" });
+    } catch {
+      // Client-side cleanup below is still enough to end the session.
+    }
+
     clearToken();
     await queryClient.invalidateQueries({ queryKey: ["auth-check"] });
     queryClient.removeQueries({ queryKey: ["posts"] });

@@ -111,8 +111,6 @@ export default function LoginPage() {
         </div>
 
         <div className="space-y-2">
-
-          {/* Email */}
           <div className="float-field">
             <input
               id="login-email"
@@ -127,7 +125,6 @@ export default function LoginPage() {
             {errors.email && <p className="field-error">{errors.email}</p>}
           </div>
 
-          {/* Password */}
           <div className="float-field">
             <input
               id="login-password"
@@ -141,7 +138,6 @@ export default function LoginPage() {
             <label htmlFor="login-password">Password</label>
             {errors.password && <p className="field-error">{errors.password}</p>}
           </div>
-
         </div>
 
         <div className="mb-4 mt-1 text-right">

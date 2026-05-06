@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useSyncExternalStore, useState } from "react";
+import { useSyncExternalStore, useState } from "react";
 import { Alert } from "@mui/material";
-import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { BLOG_CATEGORIES, POSTS_PER_PAGE } from "../lib/constants";
 import {
   getLikedPostIds,
@@ -24,29 +24,19 @@ export default function BlogListScreen() {
     getToken,
     () => null,
   );
-  const preloadRef = useRef(null);
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [page, setPage] = useState(1);
   const user = getUserFromToken(token || "");
   const userEmail = user?.email || "guest";
   const filtersActive = search.trim().length > 0 || activeCategory !== "All";
-  const filteredPostsQuery = useQuery({
-    queryKey: ["posts", token, "filtered"],
-    queryFn: () => fetchPosts(token, { page: 1, limit: 100 }),
-    enabled: Boolean(token) && filtersActive,
-    retry: false,
-  });
-  const infinitePostsQuery = useInfiniteQuery({
-    queryKey: ["posts", token, "infinite"],
-    queryFn: ({ pageParam = 1 }) =>
-      fetchPosts(token, { page: pageParam, limit: POSTS_PER_PAGE }),
-    enabled: Boolean(token) && !filtersActive,
-    initialPageParam: 1,
-    getNextPageParam: (lastPage) => {
-      const loadedPosts = lastPage.page * POSTS_PER_PAGE;
-      return loadedPosts < lastPage.total ? lastPage.page + 1 : undefined;
-    },
+  const requestPage = filtersActive ? 1 : page;
+  const requestLimit = filtersActive ? 100 : POSTS_PER_PAGE;
+
+  const postsQuery = useQuery({
+    queryKey: ["posts", token, requestPage, requestLimit],
+    queryFn: () => fetchPosts(token, { page: requestPage, limit: requestLimit }),
+    enabled: Boolean(token),
     retry: false,
   });
 
@@ -60,16 +50,7 @@ export default function BlogListScreen() {
     mutationFn: (postId) => likePost(postId, userEmail),
   });
 
-  const loadedPages = infinitePostsQuery.data?.pages ?? [];
-  const loadedPageCount = loadedPages.length;
-  const totalPosts = filtersActive
-    ? filteredPostsQuery.data?.total ?? 0
-    : infinitePostsQuery.data?.pages?.[0]?.total ?? 0;
-  const totalPages = Math.max(1, Math.ceil(totalPosts / POSTS_PER_PAGE));
-  const currentPage = filtersActive ? 1 : Math.min(page, totalPages);
-  const allPosts = filtersActive
-    ? filteredPostsQuery.data?.posts ?? []
-    : loadedPages.find((entry) => entry.page === currentPage)?.posts ?? [];
+  const allPosts = postsQuery.data?.posts ?? [];
   const today = new Date().toISOString().slice(0, 10);
   const publishedToday = allPosts.filter((post) => post.date === today).length;
   const filteredPosts = allPosts.filter((post) => {
@@ -79,57 +60,13 @@ export default function BlogListScreen() {
 
     return matchesCategory && matchesSearch;
   });
+
+  const totalPages = filtersActive
+    ? 1
+    : Math.max(1, Math.ceil((postsQuery.data?.total ?? 0) / POSTS_PER_PAGE));
+  const currentPage = filtersActive ? 1 : Math.min(page, totalPages);
   const paginatedPosts = filteredPosts;
   const likedPosts = getLikedPostIds(userEmail);
-  const postsQuery = filtersActive ? filteredPostsQuery : infinitePostsQuery;
-  const {
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-  } = infinitePostsQuery;
-
-  useEffect(() => {
-    if (filtersActive || !preloadRef.current || !hasNextPage) {
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const [entry] = entries;
-
-        if (entry?.isIntersecting && hasNextPage && !isFetchingNextPage) {
-          fetchNextPage();
-        }
-      },
-      {
-        rootMargin: "320px 0px",
-      },
-    );
-
-    observer.observe(preloadRef.current);
-
-    return () => observer.disconnect();
-  }, [
-    filtersActive,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-  ]);
-
-  async function handlePageChange(nextPage) {
-    if (filtersActive || nextPage < 1 || nextPage > totalPages) {
-      return;
-    }
-
-    let loadedCount = loadedPageCount;
-
-    while (nextPage > loadedCount && hasNextPage) {
-      const result = await fetchNextPage();
-      loadedCount = result.data?.pages?.length ?? loadedCount + 1;
-    }
-
-    setPage(nextPage);
-  }
 
   return (
     <section className="space-y-8">
@@ -163,9 +100,7 @@ export default function BlogListScreen() {
         />
       </div>
 
-      {postsQuery.isPending ? (
-        <LoadingSkeleton count={6} />
-      ) : null}
+      {postsQuery.isPending ? <LoadingSkeleton count={6} /> : null}
 
       {postsQuery.error ? (
         <Alert
@@ -210,17 +145,7 @@ export default function BlogListScreen() {
       ) : null}
 
       {!postsQuery.isPending && !postsQuery.error ? (
-        <>
-          {!filtersActive ? (
-            <div ref={preloadRef} aria-hidden="true" className="h-px w-full" />
-          ) : null}
-          {!filtersActive && isFetchingNextPage ? (
-            <p className="text-center text-sm text-[var(--text-muted)]">
-              Loading the next page...
-            </p>
-          ) : null}
-          <Pagination page={currentPage} totalPages={totalPages} onChange={handlePageChange} />
-        </>
+        <Pagination page={currentPage} totalPages={totalPages} onChange={setPage} />
       ) : null}
     </section>
   );
